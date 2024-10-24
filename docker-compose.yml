@@ -1,0 +1,83 @@
+services:
+  # BANCO DE DADOS
+  postgres_lmm:
+    image: postgres:bullseye
+    container_name: postgres-LMM
+    restart: always
+    environment:
+      # user usado aqui apenas para ficar explícito, mas se omitido, seria utilizado o mesmo valor
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: LattesMaisMais
+    volumes:
+      # salva no volume criado, os dados da pasta mencionada  
+      - postgres:/var/lib/postgresql/data
+    networks:
+      - net_backend
+  # Necessário para gerenciar o banco
+  pgadmin:
+    depends_on:
+      - postgres_lmm
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - 8081:80
+    networks:
+      - net_backend
+    volumes:
+      - pgadmin:/var/lib/pgadmin
+
+  # BACKEND
+  backend:
+    depends_on:
+      - postgres_lmm
+    command: >
+      sh -c "sleep 10 && java -jar app.jar"
+    image: openjdk:LattesMM-API
+    build: ./back
+    container_name: LattesMM-API
+    environment:
+      # Onde antes era localhost:5432, agora é postgres_lmm:5432
+      DB_HOST: postgres_lmm
+      # IP do front sendo usado no HOST. Controler de origem
+      ORIGIN_REQUESTS: http://localhost:3000
+    restart: always
+    # Requisições utilizando Axios no front, usam o browser do host, ou seja não acessam containers.
+    # Por isso se faz necessário expor a porta localmente e controlar na política de CORS do backend a origem das requisições
+    ports:
+      - 8080:8080
+    networks:
+      - net_backend
+
+  # FRONTEND
+  frontend:
+    depends_on:
+      - backend
+    image: nginx:LattesMM-UI
+    build: ./front
+    container_name: LattesMM-UI
+    restart: always
+    ports:
+      # requisições ao back utilizarão este IP (localhost:<porta>)
+      - 3000:80
+    networks:
+      - net_backend
+
+volumes:
+  # nome do docker-compose
+  postgres:
+    # nome no container a ser criado
+    name: postgres-LattesMM
+  pgadmin:
+    name: pgadmin-LattesMM
+
+networks:
+  # nome uso interno docker-compose
+  net_backend:
+    #nome container
+    name: net-back-LMM
+    # driver não informado = bridge (default)
